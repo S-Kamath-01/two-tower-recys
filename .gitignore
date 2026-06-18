@@ -13,7 +13,7 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Data
-data/
+/data/
 
 # Model artifacts
 models/
