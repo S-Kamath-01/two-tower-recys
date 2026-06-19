@@ -28,7 +28,7 @@ class TwoTowerDataset(Dataset):
 
 
     def __len__(self):
-        returnn len(self.interactions)
+        return len(self.interactions)
 
     def _sample_negative(self, user_id):
         """
