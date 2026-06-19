@@ -1,22 +1,30 @@
 # 🎬 Two-Tower Recommender System
 
-A production-style movie recommendation system built on the MovieLens 1M dataset using a **Two-Tower Neural Retrieval Architecture**.
+A retrieval-based movie recommendation system built using a Two-Tower neural architecture and trained on implicit feedback from the MovieLens 1M dataset.
 
-The goal of this project is to understand modern recommendation systems from first principles while building a complete end-to-end ML system, including data preprocessing, model training, evaluation, serving, and deployment.
+The project follows a modern recommendation pipeline consisting of:
+
+* Data preprocessing
+* Temporal train/test splitting
+* Pairwise retrieval training
+* Embedding-based candidate generation
+* Ranking evaluation
+* Model serving via FastAPI
+* Interactive recommendation interface via Streamlit
+
+Recommendations are generated using dot-product similarity between learned user and movie embeddings.
 
 ---
 
-## 🚀 Project Goals
+## Overview
 
-* Build an interview-defensible recommendation system
-* Learn embedding-based retrieval architectures
-* Understand negative sampling and ranking losses
-* Implement an end-to-end ML pipeline
-* Deploy a recommendation service using FastAPI and Streamlit
+Modern recommendation systems are typically implemented as multi-stage retrieval and ranking pipelines.
+
+This project focuses on the retrieval stage by learning separate user and movie representations using a Two-Tower architecture. User and movie embeddings are projected into a shared latent space, where relevance is measured through dot-product similarity.
 
 ---
 
-## 🏗️ System Architecture
+## Architecture
 
 ```text
                  User ID
@@ -42,11 +50,9 @@ The goal of this project is to understand modern recommendation systems from fir
       Score = User Vector · Movie Vector
 ```
 
-The model learns separate embeddings for users and movies. Recommendations are generated using dot-product similarity between learned embeddings.
-
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component       | Technology               |
 | --------------- | ------------------------ |
@@ -61,11 +67,11 @@ The model learns separate embeddings for users and movies. Recommendations are g
 
 ---
 
-## 📊 Dataset
+## Dataset
 
-**Dataset:** MovieLens 1M
+Dataset: MovieLens 1M
 
-### Original Dataset Statistics
+### Original Statistics
 
 | Metric       | Value     |
 | ------------ | --------- |
@@ -76,13 +82,13 @@ The model learns separate embeddings for users and movies. Recommendations are g
 
 ### Implicit Feedback Conversion
 
-The original MovieLens dataset contains explicit ratings from 1–5.
-
-For retrieval training, ratings are converted to implicit feedback:
+Explicit ratings are converted into implicit feedback:
 
 ```python
 rating >= 4
 ```
+
+Ratings below 4 are discarded.
 
 Resulting positive interactions:
 
@@ -92,7 +98,7 @@ Resulting positive interactions:
 
 ---
 
-## ⚙️ Preprocessing Pipeline
+## Preprocessing Pipeline
 
 Implemented in:
 
@@ -115,21 +121,68 @@ Temporal Leave-One-Out Split
 User & Movie ID Encoding
       │
       ▼
-Processed Training Artifacts
+Processed Artifacts
 ```
 
-### Train/Test Split Strategy
+### Temporal Evaluation Strategy
 
-A temporal leave-one-out split is used:
+For every user:
 
-* Train → all interactions except the latest interaction
-* Test → latest interaction
+```text
+Train → all interactions except latest
+Test  → latest interaction
+```
 
-This prevents information leakage that would occur with random train/test splits.
+This prevents temporal leakage and better reflects real-world recommendation scenarios.
 
 ---
 
-## 📈 Post-Filtering Statistics
+## Dataset Construction
+
+Implemented in:
+
+```text
+src/data/dataset.py
+```
+
+Training uses a custom PyTorch Dataset for pairwise recommendation learning.
+
+### Training Format
+
+Each training example is represented as:
+
+```text
+(user_id, positive_movie_id, negative_movie_id)
+```
+
+Example:
+
+```text
+(12, 83, 742)
+```
+
+Meaning:
+
+* User 12 positively interacted with Movie 83
+* Movie 742 is sampled as a negative example
+
+### Dynamic Negative Sampling
+
+Negative samples are generated during training using rejection sampling.
+
+For a user u:
+
+```text
+negative_movie ∉ positive_history(u)
+```
+
+User histories are built exclusively from training interactions to avoid information leakage from held-out test data.
+
+---
+
+## Dataset Statistics
+
+### Post-Filtering Statistics
 
 | Metric                                       | Value   |
 | -------------------------------------------- | ------- |
@@ -139,16 +192,60 @@ This prevents information leakage that would occur with random train/test splits
 | Users With Exactly One Positive Interaction  | 1       |
 | Movies With Exactly One Positive Interaction | 152     |
 
-### Key Findings
+### Training Statistics
 
-* User-item interaction matrix is **95.53% sparse**
-* Strong long-tail popularity distribution exists
-* 173 movies have no positive interactions after filtering
-* Recommendation is treated as a **ranking problem**, not a rating prediction problem
+| Metric                   | Value   |
+| ------------------------ | ------- |
+| Train Interactions       | 569,243 |
+| Test Interactions        | 6,038   |
+| Users With Train History | 6,037   |
+| Movies                   | 3,533   |
 
 ---
 
-## 📂 Project Structure
+## Methodology
+
+### Implicit Feedback
+
+Only ratings greater than or equal to 4 are treated as positive interactions.
+
+### Temporal Evaluation
+
+Future interactions are never used during training.
+
+### Pairwise Learning
+
+Training examples are represented as:
+
+```text
+(user, positive_item, negative_item)
+```
+
+rather than binary classification labels.
+
+### Dynamic Negative Sampling
+
+Negative samples are generated during training instead of being precomputed.
+
+### Two-Tower Retrieval
+
+User and movie embeddings are learned independently and compared using dot-product similarity.
+
+---
+
+## Evaluation
+
+The retrieval model will be evaluated using ranking-based metrics:
+
+* Recall@K
+* Hit Rate@K
+* Mean Reciprocal Rank (MRR)
+
+Metrics such as RMSE and Accuracy are intentionally not used because recommendation is fundamentally a retrieval and ranking problem.
+
+---
+
+## Project Structure
 
 ```text
 two-tower-recsys/
@@ -157,7 +254,8 @@ two-tower-recsys/
 │   └── processed/
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb
-│   └── 02_preprocess_testing.ipynb
+│   ├── 02_preprocess_testing.ipynb
+│   └── 03_dataset_testing.ipynb
 ├── src/
 │   ├── data/
 │   │   ├── preprocess.py
@@ -170,72 +268,58 @@ two-tower-recsys/
 ├── streamlit_app/
 ├── tests/
 ├── README.md
+├── LICENSE
 └── requirements.txt
 ```
 
 ---
 
-## ✅ Progress Tracker
+## Roadmap
 
-### Data Pipeline
+### Completed
 
-* [x] Environment setup
-* [x] MovieLens dataset acquisition
-* [x] Exploratory data analysis
-* [x] Sparsity analysis
-* [x] Implicit feedback conversion
-* [x] Temporal train/test split
-* [x] User/movie ID encoding
-* [x] Processed artifact generation
+* Dataset exploration
+* Implicit feedback conversion
+* Temporal train/test split
+* User/movie ID encoding
+* Processed artifact generation
+* Pairwise dataset construction
+* Dynamic negative sampling
 
-### Model Development
+### In Progress
 
-* [ ] PyTorch Dataset implementation
-* [ ] Negative sampling
-* [ ] Two-tower architecture
-* [ ] Training pipeline
-* [ ] Ranking evaluation
+* Two-Tower retrieval model
 
-### Serving & Deployment
+### Planned
 
-* [ ] PostgreSQL integration
-* [ ] FastAPI backend
-* [ ] Streamlit frontend
-* [ ] Cloud deployment
+* BPR training pipeline
+* Ranking evaluation
+* FastAPI serving layer
+* Streamlit frontend
+* Dockerization
+* Cloud deployment
 
 ---
 
-## 📏 Evaluation Metrics
+## Installation
 
-The recommender will be evaluated using ranking-based metrics:
+```bash
+git clone https://github.com/<your-username>/two-tower-recsys.git
+cd two-tower-recsys
 
-* Precision@K
-* Recall@K
-
-Metrics such as RMSE and Accuracy are intentionally not used because recommendation is fundamentally a retrieval and ranking task.
-
----
-
-## 🔮 Future Improvements
-
-Potential V2 enhancements:
-
-* Hard negative mining
-* FAISS-based ANN retrieval
-* Cold-start strategies
-* Hybrid recommendation features
-* Real-time recommendation logging
-* Retrieval + ranking pipeline
+pip install -r requirements.txt
+```
 
 ---
 
-## 📚 Learning Objectives
+## Contributing
 
-This project is intentionally being built from scratch to deeply understand:
+Contributions, suggestions, issue reports, and code reviews are welcome.
 
-* Embeddings
-* Collaborative filtering
-* Negative sampling
-* Retrieval systems
-* Recommendation system evaluation
-* Production ML pipelines
+For significant changes, please open an issue before submitting a pull request.
+
+---
+
+## License
+
+This project is licensed under the MIT License.
