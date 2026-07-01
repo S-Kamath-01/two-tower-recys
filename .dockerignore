@@ -1,0 +1,11 @@
+.git
+.env
+.venv
+venv
+__pycache__
+*.py[cod]
+.ipynb_checkpoints
+notebooks
+data/raw
+checkpoints/test
+checkpoints/test_pipeline

@@ -1,0 +1,46 @@
+services:
+  # FastAPI backend
+  backend:
+    build: .
+    container_name: two-tower-backend
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_CHECKPOINT: /app/checkpoints/model_final.pt
+      FAISS_INDEX: /app/checkpoints/movie_embeddings.faiss
+      METADATA_PATH: /app/data/processed/metadata.json
+    volumes:
+      # Mount volumes for hot-reload during development (optional)
+      - ./src:/app/src
+      - ./checkpoints:/app/checkpoints
+      - ./data/processed:/app/data/processed
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - two-tower-net
+
+  frontend:
+    build: .
+    container_name: two-tower-frontend
+    command: streamlit run streamlit_app/app.py --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://backend:8000
+    volumes:
+      - ./streamlit_app:/app/streamlit_app
+      - ./data:/app/data:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - two-tower-net
+
+networks:
+  two-tower-net:
+    driver: bridge
+

@@ -17,9 +17,15 @@ __pycache__/
 
 # Model artifacts
 models/
+checkpoints/
 *.pt
 *.pth
 *.pkl
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
 
 # IDE
 .vscode/

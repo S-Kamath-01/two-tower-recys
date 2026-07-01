@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import pickle
 import json
+import argparse
 
 def load_ratings(filepath):
     """
@@ -141,6 +142,11 @@ def save_processed(train, test, user_to_idx, movie_to_idx, threshold, output_dir
     with open(os.path.join(output_dir, "movie_to_idx.pkl"), "wb") as f:
         pickle.dump(movie_to_idx, f)
 
+    # JSON copy is safe to load in serving/UI processes. Pickle files should
+    # only be opened when their provenance is trusted.
+    with open(os.path.join(output_dir, "movie_to_idx.json"), "w") as f:
+        json.dump({str(key): value for key, value in movie_to_idx.items()}, f)
+
     metadata = {
     "threshold": threshold,
     "num_users": len(user_to_idx),
@@ -151,6 +157,30 @@ def save_processed(train, test, user_to_idx, movie_to_idx, threshold, output_dir
 
     with open(os.path.join(output_dir, "metadata.json"), "w") as f:
         json.dump(metadata, f)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Preprocess MovieLens ratings")
+    parser.add_argument("--ratings", default="data/raw/ml-1m/ratings.dat")
+    parser.add_argument("--output-dir", default="data/processed")
+    parser.add_argument("--threshold", type=float, default=4.0)
+    args = parser.parse_args()
+
+    ratings = load_ratings(args.ratings)
+    positives = filter_positive(ratings, args.threshold)
+    if positives.empty:
+        raise ValueError("No positive interactions remain after filtering")
+    user_to_idx, movie_to_idx = build_id_mappings(positives)
+    train, test = temporal_split(positives)
+    train = apply_mappings(train, user_to_idx, movie_to_idx)
+    test = apply_mappings(test, user_to_idx, movie_to_idx)
+    save_processed(
+        train, test, user_to_idx, movie_to_idx, args.threshold, args.output_dir
+    )
+    print(
+        f"Saved {len(train):,} train and {len(test):,} test interactions "
+        f"to {args.output_dir}"
+    )
 
 
 if __name__ == "__main__":

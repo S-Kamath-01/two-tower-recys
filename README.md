@@ -1,325 +1,208 @@
-# 🎬 Two-Tower Recommender System
+# Two-Tower Movie Recommender
 
-A retrieval-based movie recommendation system built using a Two-Tower neural architecture and trained on implicit feedback from the MovieLens 1M dataset.
+[![CI](https://github.com/S-Kamath-01/two-tower-recys/actions/workflows/ci.yml/badge.svg)](https://github.com/S-Kamath-01/two-tower-recys/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 
-The project follows a modern recommendation pipeline consisting of:
+An end-to-end recommendation system built with PyTorch, FAISS, FastAPI, and
+Streamlit. It learns separate user and movie representations from implicit
+MovieLens 1M feedback and retrieves recommendations using exact inner-product
+search.
 
-* Data preprocessing
-* Temporal train/test splitting
-* Pairwise retrieval training
-* Embedding-based candidate generation
-* Ranking evaluation
-* Model serving via FastAPI
-* Interactive recommendation interface via Streamlit
+## What is included
 
-Recommendations are generated using dot-product similarity between learned user and movie embeddings.
-
----
-
-## Overview
-
-Modern recommendation systems are typically implemented as multi-stage retrieval and ranking pipelines.
-
-This project focuses on the retrieval stage by learning separate user and movie representations using a Two-Tower architecture. User and movie embeddings are projected into a shared latent space, where relevance is measured through dot-product similarity.
-
----
+- Temporal leave-one-out preprocessing for implicit feedback
+- Dynamic negative sampling and Bayesian Personalized Ranking (BPR) loss
+- Two-tower PyTorch model with independently computable item embeddings
+- Recall@K, Hit Rate@K, and MRR@K evaluation
+- FAISS `IndexFlatIP` retrieval
+- FastAPI inference service and Streamlit interface
+- Docker Compose configuration and GitHub Actions tests
 
 ## Architecture
 
 ```text
-                 User ID
-                    │
-                    ▼
-          ┌─────────────────┐
-          │ User Embedding  │
-          └─────────────────┘
-                    │
-                    ▼
-               User Vector
-
-                 Movie ID
-                    │
-                    ▼
-          ┌─────────────────┐
-          │ Item Embedding  │
-          └─────────────────┘
-                    │
-                    ▼
-               Movie Vector
-
-      Score = User Vector · Movie Vector
+User ID  -> User tower  -> User embedding  --+
+                                               +-> dot product -> score
+Movie ID -> Movie tower -> Movie embedding --+
 ```
 
----
+Because the towers are independent, movie embeddings can be computed once and
+stored in a retrieval index. This repository uses exact FAISS search because
+MovieLens 1M has only a few thousand movies.
 
-## Tech Stack
-
-| Component       | Technology               |
-| --------------- | ------------------------ |
-| Language        | Python                   |
-| ML Framework    | PyTorch                  |
-| Data Processing | Pandas, NumPy            |
-| Database        | PostgreSQL               |
-| Backend         | FastAPI                  |
-| Frontend        | Streamlit                |
-| Deployment      | Render + Streamlit Cloud |
-| Version Control | Git + GitHub             |
-
----
-
-## Dataset
-
-Dataset: MovieLens 1M
-
-### Original Statistics
-
-| Metric       | Value     |
-| ------------ | --------- |
-| Users        | 6,040     |
-| Movies       | 3,706     |
-| Interactions | 1,000,209 |
-| Sparsity     | 95.53%    |
-
-### Implicit Feedback Conversion
-
-Explicit ratings are converted into implicit feedback:
-
-```python
-rating >= 4
-```
-
-Ratings below 4 are discarded.
-
-Resulting positive interactions:
+## Repository layout
 
 ```text
-575,281
+src/
+  data/preprocess.py   Dataset preprocessing CLI
+  data/dataset.py      Pairwise training dataset
+  model.py             Two-tower model
+  train.py             BPR training CLI
+  evaluate.py          Offline evaluation CLI
+  inference.py         FAISS index builder
+  main.py              FastAPI service
+streamlit_app/app.py   Web interface
+tests/                 Unit tests
+notebooks/             Exploration and pipeline walkthroughs
 ```
 
----
+Data, virtual environments, `.env`, model weights, and generated indexes are
+intentionally excluded from Git. A fresh clone therefore needs the preparation
+steps below before the application can start.
 
-## Preprocessing Pipeline
+## Setup
 
-Implemented in:
-
-```text
-src/data/preprocess.py
-```
-
-Pipeline:
-
-```text
-Raw Ratings
-      │
-      ▼
-Filter Positive Interactions
-      │
-      ▼
-Temporal Leave-One-Out Split
-      │
-      ▼
-User & Movie ID Encoding
-      │
-      ▼
-Processed Artifacts
-```
-
-### Temporal Evaluation Strategy
-
-For every user:
-
-```text
-Train → all interactions except latest
-Test  → latest interaction
-```
-
-This prevents temporal leakage and better reflects real-world recommendation scenarios.
-
----
-
-## Dataset Construction
-
-Implemented in:
-
-```text
-src/data/dataset.py
-```
-
-Training uses a custom PyTorch Dataset for pairwise recommendation learning.
-
-### Training Format
-
-Each training example is represented as:
-
-```text
-(user_id, positive_movie_id, negative_movie_id)
-```
-
-Example:
-
-```text
-(12, 83, 742)
-```
-
-Meaning:
-
-* User 12 positively interacted with Movie 83
-* Movie 742 is sampled as a negative example
-
-### Dynamic Negative Sampling
-
-Negative samples are generated during training using rejection sampling.
-
-For a user u:
-
-```text
-negative_movie ∉ positive_history(u)
-```
-
-User histories are built exclusively from training interactions to avoid information leakage from held-out test data.
-
----
-
-## Dataset Statistics
-
-### Post-Filtering Statistics
-
-| Metric                                       | Value   |
-| -------------------------------------------- | ------- |
-| Users Retained                               | 6,038   |
-| Movies Retained                              | 3,533   |
-| Positive Interactions                        | 575,281 |
-| Users With Exactly One Positive Interaction  | 1       |
-| Movies With Exactly One Positive Interaction | 152     |
-
-### Training Statistics
-
-| Metric                   | Value   |
-| ------------------------ | ------- |
-| Train Interactions       | 569,243 |
-| Test Interactions        | 6,038   |
-| Users With Train History | 6,037   |
-| Movies                   | 3,533   |
-
----
-
-## Methodology
-
-### Implicit Feedback
-
-Only ratings greater than or equal to 4 are treated as positive interactions.
-
-### Temporal Evaluation
-
-Future interactions are never used during training.
-
-### Pairwise Learning
-
-Training examples are represented as:
-
-```text
-(user, positive_item, negative_item)
-```
-
-rather than binary classification labels.
-
-### Dynamic Negative Sampling
-
-Negative samples are generated during training instead of being precomputed.
-
-### Two-Tower Retrieval
-
-User and movie embeddings are learned independently and compared using dot-product similarity.
-
----
-
-## Evaluation
-
-The retrieval model will be evaluated using ranking-based metrics:
-
-* Recall@K
-* Hit Rate@K
-* Mean Reciprocal Rank (MRR)
-
-Metrics such as RMSE and Accuracy are intentionally not used because recommendation is fundamentally a retrieval and ranking problem.
-
----
-
-## Project Structure
-
-```text
-two-tower-recsys/
-├── data/
-│   ├── raw/
-│   └── processed/
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_preprocess_testing.ipynb
-│   └── 03_dataset_testing.ipynb
-├── src/
-│   ├── data/
-│   │   ├── preprocess.py
-│   │   └── dataset.py
-│   ├── model.py
-│   ├── train.py
-│   ├── evaluate.py
-│   └── inference.py
-├── models/
-├── streamlit_app/
-├── tests/
-├── README.md
-├── LICENSE
-└── requirements.txt
-```
-
----
-
-## Roadmap
-
-### Completed
-
-* Dataset exploration
-* Implicit feedback conversion
-* Temporal train/test split
-* User/movie ID encoding
-* Processed artifact generation
-* Pairwise dataset construction
-* Dynamic negative sampling
-
-### In Progress
-
-* Two-Tower retrieval model
-
-### Planned
-
-* BPR training pipeline
-* Ranking evaluation
-* FastAPI serving layer
-* Streamlit frontend
-* Dockerization
-* Cloud deployment
-
----
-
-## Installation
+Requirements: Python 3.10 or newer and approximately 4 GB of available RAM.
 
 ```bash
-git clone https://github.com/<your-username>/two-tower-recsys.git
-cd two-tower-recsys
-
-pip install -r requirements.txt
+git clone https://github.com/S-Kamath-01/two-tower-recys.git
+cd two-tower-recys
+python -m venv venv
 ```
 
----
+Activate the environment:
 
-## Contributing
+```powershell
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
+```
 
-Contributions, suggestions, issue reports, and code reviews are welcome.
+```bash
+# macOS or Linux
+source venv/bin/activate
+```
 
-For significant changes, please open an issue before submitting a pull request.
+Install the dependencies:
 
----
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+## Prepare data and artifacts
+
+1. Download `ml-1m.zip` from the
+   [MovieLens 1M dataset page](https://grouplens.org/datasets/movielens/1m/).
+2. Extract it so that `data/raw/ml-1m/ratings.dat` exists.
+3. Run the pipeline from the repository root:
+
+```bash
+python -m src.data.preprocess
+python -m src.train --epochs 50
+python -m src.evaluate
+python -m src.inference
+```
+
+Training writes `checkpoints/model_final.pt`; index building writes
+`checkpoints/movie_embeddings.faiss`. These generated files are deliberately
+not committed.
+
+For a quick smoke test, use fewer epochs:
+
+```bash
+python -m src.train --epochs 1 --output_dir checkpoints/smoke
+```
+
+## Run locally
+
+Start the API from the repository root:
+
+```bash
+python -m uvicorn src.main:app --reload --port 8000
+```
+
+In a second terminal with the same environment activated:
+
+```bash
+python -m streamlit run streamlit_app/app.py
+```
+
+Open:
+
+- Web interface: <http://localhost:8501>
+- API documentation: <http://localhost:8000/docs>
+- Health check: <http://localhost:8000/health>
+
+Example request:
+
+```bash
+curl -X POST http://localhost:8000/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 0, "k": 10}'
+```
+
+## Docker Compose
+
+Docker also expects the processed data, trained checkpoint, and FAISS index to
+exist locally first.
+
+```bash
+docker compose up --build
+```
+
+This starts the API on port `8000` and Streamlit on port `8501`.
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q src streamlit_app
+```
+
+The same checks run automatically through GitHub Actions.
+
+## API
+
+### `GET /health`
+
+Reports whether metadata, the model, and the FAISS index loaded successfully.
+
+### `POST /recommend`
+
+```json
+{
+  "user_id": 0,
+  "k": 10
+}
+```
+
+The response contains ranked index-encoded movie IDs and their inner-product
+scores. These IDs are internal model indices, not original MovieLens IDs.
+
+## Evaluation notes
+
+The preprocessing step keeps each user's latest positive interaction for the
+test set. Evaluation masks training interactions before ranking, preventing
+already-consumed movies from inflating the reported metrics. Results depend on
+the random initialization and training configuration; this README intentionally
+does not claim benchmark numbers that are not produced by CI.
+
+## Privacy and data handling
+
+- MovieLens data and all derived interaction files remain local and ignored.
+- `.env` is ignored; only the non-secret `.env.example` template is published.
+- Checkpoints and FAISS indexes are ignored because they are generated artifacts.
+- The API accepts an index-encoded user ID only and has no authentication. Do not
+  expose it publicly without adding access control, rate limiting, and HTTPS.
+
+MovieLens data is distributed under the terms stated by GroupLens. Review those
+terms before redistributing the dataset or using it commercially.
+
+## Limitations
+
+- ID-only towers cannot recommend for unseen users or movies.
+- One sampled negative per positive is simple but not necessarily optimal.
+- The service does not yet filter previously consumed movies at online serving
+  time; the masking is currently part of offline evaluation only.
+- In-memory user embedding caching is process-local and unbounded.
+
+## References
+
+- [MovieLens 1M](https://grouplens.org/datasets/movielens/1m/)
+- [BPR: Bayesian Personalized Ranking from Implicit Feedback](https://arxiv.org/abs/1205.2618)
+- [FAISS](https://github.com/facebookresearch/faiss)
 
 ## License
 
-This project is licensed under the MIT License.
+The source code is available under the [MIT License](LICENSE). The MovieLens
+dataset has separate terms and is not covered by this repository's MIT license.

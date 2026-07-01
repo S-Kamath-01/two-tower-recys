@@ -46,6 +46,8 @@ class TwoTowerDataset(Dataset):
         """
 
         positives = self.user_positives[user_id]
+        if len(positives) >= self.num_movies:
+            raise ValueError(f"User {user_id} has interacted with every movie")
         while True:
             candidate = np.random.randint(0, self.num_movies)
             if candidate not in positives:
